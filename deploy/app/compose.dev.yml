@@ -1,0 +1,11 @@
+# Local development override: builds the image from source instead of pulling it.
+#
+#   docker compose -f compose.yml -f compose.dev.yml up -d --build
+
+services:
+  redis:
+    build:
+      context: ../..
+      dockerfile: build/Dockerfile
+    environment:
+      REDIS_LOG_LEVEL: debug

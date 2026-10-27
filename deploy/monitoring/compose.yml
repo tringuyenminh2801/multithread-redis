@@ -1,0 +1,52 @@
+# Monitoring stack: Grafana + Loki (logs) + Mimir (metrics), all single-binary / monolithic.
+# Runs once. It can share a host with the app stack today and move to its own host later;
+# only LOKI_URL / MIMIR_URL in the app stack's .env change.
+#
+#   cp .env.example .env   # then edit
+#   docker compose up -d
+#
+# Ports 3100 (Loki) and 9009 (Mimir) accept pushes from Alloy. They have no auth:
+# when this runs on a separate host, allow them only from app hosts (firewall / private network).
+
+name: monitoring
+
+services:
+  loki:
+    image: grafana/loki:3.5.0
+    restart: unless-stopped
+    command: -config.file=/etc/loki/config.yaml
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./loki/config.yaml:/etc/loki/config.yaml:ro
+      - loki-data:/loki
+
+  mimir:
+    image: grafana/mimir:2.16.0
+    restart: unless-stopped
+    command: -config.file=/etc/mimir/config.yaml -target=all
+    ports:
+      - "9009:9009"
+    volumes:
+      - ./mimir/config.yaml:/etc/mimir/config.yaml:ro
+      - mimir-data:/data
+
+  grafana:
+    image: grafana/grafana:12.0.0
+    restart: unless-stopped
+    depends_on: [loki, mimir]
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?set GRAFANA_ADMIN_PASSWORD in .env}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+
+volumes:
+  loki-data:
+  mimir-data:
+  grafana-data:

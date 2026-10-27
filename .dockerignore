@@ -1,0 +1,14 @@
+.git
+.github
+.vscode
+.idea
+.codegraph
+deploy
+build
+*.md
+LICENSE
+**/*_test.go
+*.exe
+*.out
+coverage.*
+.env

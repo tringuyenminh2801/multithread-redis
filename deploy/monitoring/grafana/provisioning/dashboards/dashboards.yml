@@ -1,0 +1,11 @@
+apiVersion: 1
+
+providers:
+  - name: repo-dashboards
+    folder: Redis
+    type: file
+    allowUiUpdates: true
+    options:
+      # Dashboards are JSON files in deploy/monitoring/grafana/dashboards/.
+      # Edit in the UI, export the JSON, and commit it here.
+      path: /var/lib/grafana/dashboards

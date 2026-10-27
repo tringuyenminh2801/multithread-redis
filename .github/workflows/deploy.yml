@@ -1,0 +1,119 @@
+name: Deploy app
+
+# Build the image, push it to GHCR, then pull and run it on the app host.
+#
+# GitHub Environment "production" (Settings -> Environments) must define:
+#   secrets:   SSH_HOST, SSH_USER, SSH_PRIVATE_KEY
+#   variables: REDIS_POOL_SIZE, REDIS_MAX_WAITING_CONNS, REDIS_BUFFER_SIZE, REDIS_LOG_LEVEL,
+#              LOKI_URL, MIMIR_URL, HOST_NAME
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "deploy/monitoring/**"
+      - "**.md"
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-app
+  cancel-in-progress: false
+
+env:
+  IMAGE: ghcr.io/${{ github.repository }}
+  APP_DIR: multithreaded-redis # relative to the SSH user's home
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      tag: ${{ github.sha }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: build/Dockerfile
+          push: true
+          tags: |
+            ${{ env.IMAGE }}:${{ github.sha }}
+            ${{ env.IMAGE }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+      packages: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Copy app stack to host
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          source: "deploy/app/compose.yml,deploy/app/alloy/config.alloy"
+          target: ${{ env.APP_DIR }}
+          strip_components: 2
+
+      - name: Pull and run
+        uses: appleboy/ssh-action@v1
+        env:
+          APP_DIR: ${{ env.APP_DIR }}
+          IMAGE: ${{ env.IMAGE }}:${{ needs.build.outputs.tag }}
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REDIS_POOL_SIZE: ${{ vars.REDIS_POOL_SIZE }}
+          REDIS_MAX_WAITING_CONNS: ${{ vars.REDIS_MAX_WAITING_CONNS }}
+          REDIS_BUFFER_SIZE: ${{ vars.REDIS_BUFFER_SIZE }}
+          REDIS_LOG_LEVEL: ${{ vars.REDIS_LOG_LEVEL }}
+          LOKI_URL: ${{ vars.LOKI_URL }}
+          MIMIR_URL: ${{ vars.MIMIR_URL }}
+          HOST_NAME: ${{ vars.HOST_NAME }}
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          envs: APP_DIR,IMAGE,GHCR_USER,GHCR_TOKEN,REDIS_POOL_SIZE,REDIS_MAX_WAITING_CONNS,REDIS_BUFFER_SIZE,REDIS_LOG_LEVEL,LOKI_URL,MIMIR_URL,HOST_NAME
+          script: |
+            set -e
+            cd "$APP_DIR"
+
+            umask 077
+            cat > .env <<EOF
+            IMAGE=$IMAGE
+            REDIS_POOL_SIZE=$REDIS_POOL_SIZE
+            REDIS_MAX_WAITING_CONNS=$REDIS_MAX_WAITING_CONNS
+            REDIS_BUFFER_SIZE=$REDIS_BUFFER_SIZE
+            REDIS_LOG_LEVEL=$REDIS_LOG_LEVEL
+            LOKI_URL=$LOKI_URL
+            MIMIR_URL=$MIMIR_URL
+            HOST_NAME=$HOST_NAME
+            ENVIRONMENT=production
+            EOF
+
+            echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
+            docker compose pull
+            docker compose up -d --remove-orphans
+            docker logout ghcr.io
+            docker image prune -f

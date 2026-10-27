@@ -1,0 +1,62 @@
+name: Deploy monitoring
+
+# Deploys Grafana + Loki + Mimir. Runs when the monitoring config changes, or manually.
+# Point the "monitoring" environment's SSH_HOST at the app host to share one VM,
+# or at a dedicated host to separate them; nothing else changes.
+#
+# GitHub Environment "monitoring" must define:
+#   secrets: SSH_HOST, SSH_USER, SSH_PRIVATE_KEY, GRAFANA_ADMIN_PASSWORD
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "deploy/monitoring/**"
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-monitoring
+  cancel-in-progress: false
+
+env:
+  MONITORING_DIR: monitoring # relative to the SSH user's home
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: monitoring
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Copy monitoring stack to host
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          source: "deploy/monitoring/compose.yml,deploy/monitoring/loki,deploy/monitoring/mimir,deploy/monitoring/grafana"
+          target: ${{ env.MONITORING_DIR }}
+          strip_components: 2
+
+      - name: Start stack
+        uses: appleboy/ssh-action@v1
+        env:
+          MONITORING_DIR: ${{ env.MONITORING_DIR }}
+          GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          envs: MONITORING_DIR,GRAFANA_ADMIN_PASSWORD
+          script: |
+            set -e
+            cd "$MONITORING_DIR"
+
+            umask 077
+            cat > .env <<EOF
+            GRAFANA_ADMIN_PASSWORD=$GRAFANA_ADMIN_PASSWORD
+            EOF
+
+            docker compose pull
+            docker compose up -d --remove-orphans

@@ -1,0 +1,159 @@
+{
+  "uid": "redis-overview",
+  "title": "Redis server overview",
+  "tags": ["redis"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "refresh": "30s",
+  "time": { "from": "now-1h", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "host",
+        "label": "Host",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "mimir" },
+        "query": { "query": "label_values(redis_pool_workers, host)", "refId": "host" },
+        "definition": "label_values(redis_pool_workers, host)",
+        "includeAll": true,
+        "multi": true,
+        "current": { "text": "All", "value": "$__all" },
+        "refresh": 2
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "row",
+      "title": "Application",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Active connections / workers",
+      "datasource": { "type": "prometheus", "uid": "mimir" },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 1 },
+      "targets": [
+        { "refId": "A", "expr": "sum by (host) (redis_connections_active{host=~\"$host\"})", "legendFormat": "active {{host}}" },
+        { "refId": "B", "expr": "sum by (host) (redis_pool_workers{host=~\"$host\"})", "legendFormat": "workers {{host}}" }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Pool queue depth",
+      "description": "Accepted connections waiting for a free worker. Sustained growth means the pool is saturated.",
+      "datasource": { "type": "prometheus", "uid": "mimir" },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 1 },
+      "targets": [
+        { "refId": "A", "expr": "sum by (host) (redis_pool_queue_depth{host=~\"$host\"})", "legendFormat": "{{host}}" }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Connections handled / s",
+      "datasource": { "type": "prometheus", "uid": "mimir" },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 1 },
+      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
+      "targets": [
+        { "refId": "A", "expr": "sum by (host) (rate(redis_connections_handled_total{host=~\"$host\"}[$__rate_interval]))", "legendFormat": "{{host}}" }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Goroutines",
+      "datasource": { "type": "prometheus", "uid": "mimir" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 9 },
+      "targets": [
+        { "refId": "A", "expr": "go_goroutines{job=\"redis\", host=~\"$host\"}", "legendFormat": "{{host}}" }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Go heap in use",
+      "datasource": { "type": "prometheus", "uid": "mimir" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 9 },
+      "fieldConfig": { "defaults": { "unit": "bytes" }, "overrides": [] },
+      "targets": [
+        { "refId": "A", "expr": "go_memstats_heap_inuse_bytes{job=\"redis\", host=~\"$host\"}", "legendFormat": "{{host}}" }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "row",
+      "title": "Containers",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 17 },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Container CPU",
+      "datasource": { "type": "prometheus", "uid": "mimir" },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 18 },
+      "fieldConfig": { "defaults": { "unit": "percentunit" }, "overrides": [] },
+      "targets": [
+        { "refId": "A", "expr": "sum by (host, name) (rate(container_cpu_usage_seconds_total{name!=\"\", host=~\"$host\"}[$__rate_interval]))", "legendFormat": "{{name}} @ {{host}}" }
+      ]
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Container memory (working set)",
+      "datasource": { "type": "prometheus", "uid": "mimir" },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 18 },
+      "fieldConfig": { "defaults": { "unit": "bytes" }, "overrides": [] },
+      "targets": [
+        { "refId": "A", "expr": "sum by (host, name) (container_memory_working_set_bytes{name!=\"\", host=~\"$host\"})", "legendFormat": "{{name}} @ {{host}}" }
+      ]
+    },
+    {
+      "id": 10,
+      "type": "stat",
+      "title": "Containers up",
+      "description": "Containers seen by cAdvisor in the last minute.",
+      "datasource": { "type": "prometheus", "uid": "mimir" },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 18 },
+      "targets": [
+        { "refId": "A", "expr": "count by (host) (time() - container_last_seen{name!=\"\", host=~\"$host\"} < 60)", "legendFormat": "{{host}}" }
+      ]
+    },
+    {
+      "id": 11,
+      "type": "row",
+      "title": "Logs",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 26 },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 12,
+      "type": "timeseries",
+      "title": "Log lines by level",
+      "datasource": { "type": "loki", "uid": "loki" },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 27 },
+      "targets": [
+        { "refId": "A", "expr": "sum by (level) (count_over_time({service=\"redis\", host=~\"$host\"} [$__auto]))", "legendFormat": "{{level}}" }
+      ]
+    },
+    {
+      "id": 13,
+      "type": "logs",
+      "title": "Redis logs",
+      "datasource": { "type": "loki", "uid": "loki" },
+      "gridPos": { "h": 12, "w": 24, "x": 0, "y": 35 },
+      "options": { "showTime": true, "wrapLogMessage": true, "sortOrder": "Descending" },
+      "targets": [
+        { "refId": "A", "expr": "{service=\"redis\", host=~\"$host\"}" }
+      ]
+    }
+  ]
+}
