@@ -39,6 +39,13 @@ func Decode(data []byte) (Value, int, error) {
 	}
 
 	t := Type(data[0])
+	switch t {
+	case SimpleString, SimpleError, Integer, BulkString, Array:
+	default:
+		// Reject before waiting for a CRLF that may never come.
+		return Value{}, 0, fmt.Errorf("RESP: unknown type byte %q", data[0])
+	}
+
 	line, n, err := readLine(data[1:])
 
 	if err != nil {
@@ -55,21 +62,21 @@ func Decode(data []byte) (Value, int, error) {
 		return decodeInteger(line, n)
 
 	case BulkString:
-		return decodeBulkString(line, n)
+		return decodeBulkString(data, line, n)
 
 	case Array:
-		return decodeArray(line, n)
+		return decodeArray(data, line, n)
 
 	default:
 		return Value{}, 0, fmt.Errorf("RESP: unknown type byte %q", data[0])
 	}
 }
 
-// Array
-func decodeArray(data []byte, n int) (Value, int, error) {
-	count, err := strconv.Atoi(string(data))
+// Array: line holds the element count, and the elements start at data[n:].
+func decodeArray(data, line []byte, n int) (Value, int, error) {
+	count, err := strconv.Atoi(string(line))
 	if err != nil || count < -1 {
-		return Value{}, 0, fmt.Errorf("RESP: invalid array length %q", data)
+		return Value{}, 0, fmt.Errorf("RESP: invalid array length %q", line)
 	}
 	if count == -1 {
 		return Value{Type: Array}, n, nil
@@ -89,12 +96,12 @@ func decodeArray(data []byte, n int) (Value, int, error) {
 	return Value{Type: Array, Data: elems}, n, nil
 }
 
-// Bulk String
-func decodeBulkString(data []byte, n int) (Value, int, error) {
-	length, err := strconv.Atoi(string(data))
+// Bulk String: line holds the length, and the body starts at data[n:].
+func decodeBulkString(data, line []byte, n int) (Value, int, error) {
+	length, err := strconv.Atoi(string(line))
 
 	if err != nil || length < -1 {
-		return Value{}, 0, fmt.Errorf("RESP: invalid bulk string length %q", data)
+		return Value{}, 0, fmt.Errorf("RESP: invalid bulk string length %q", line)
 	}
 
 	if length == -1 {

@@ -4,8 +4,6 @@ import (
 	"log/slog"
 	"net"
 	"sync/atomic"
-
-	"multithreadredis/internal/protocol"
 )
 
 type Job struct {
@@ -42,30 +40,14 @@ func handleConnection(conn net.Conn, bufferSize int) {
 	defer conn.Close()
 
 	buf := make([]byte, bufferSize)
-	i := 0
 
-	for {
-		n, err := conn.Read(buf)
-
-		if err != nil {
-			slog.Debug("read from connection failed", "error", err)
-
-			return
-		}
-
-		command, nextI, err := protocol.Decode(buf[i:n])
-
-		if err == nil {
-			slog.Debug("received", "type", string(command.Type), "data", command.Data)
-		}
-
-		if nextI == n {
-			break
-		}
-
-		i = nextI
+	n, err := conn.Read(buf)
+	if err != nil {
+		slog.Debug("read from connection failed", "error", err)
+		return
 	}
 
+	slog.Debug("received", "data", string(buf[:n]))
 	conn.Write([]byte("Thank you!"))
 }
 
