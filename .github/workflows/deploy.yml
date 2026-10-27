@@ -1,6 +1,7 @@
 name: Deploy app
 
 # Build the image, push it to GHCR, then pull and run it on the app host.
+# Manual only: start it from Actions -> Deploy app -> Run workflow.
 #
 # GitHub Environment "production" (Settings -> Environments) must define:
 #   secrets:   SSH_HOST, SSH_USER, SSH_PRIVATE_KEY
@@ -8,11 +9,6 @@ name: Deploy app
 #              LOKI_URL, MIMIR_URL, HOST_NAME
 
 on:
-  push:
-    branches: [main]
-    paths-ignore:
-      - "deploy/monitoring/**"
-      - "**.md"
   workflow_dispatch:
 
 concurrency:
